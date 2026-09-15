@@ -1,0 +1,820 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Product Board</title>
+
+  <!--
+    ============================================================
+    SETUP: before this works you must paste your Supabase project
+    URL and anon key into the CONFIG block further down in the
+    <script type="text/babel"> section. See the setup guide.
+    ============================================================
+  -->
+
+  <style>
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; height: 100%; }
+    body {
+      font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
+      color: #14110F; background: #3D5A6C;
+    }
+    input, textarea, button { font-family: inherit; color: inherit; }
+    button { cursor: pointer; border: none; background: none; }
+    .serif { font-family: 'Fraunces', ui-serif, Georgia, serif; }
+
+    #loading, #error {
+      position: fixed; inset: 0;
+      display: flex; align-items: center; justify-content: center;
+      color: white; text-align: center; padding: 24px;
+    }
+    #error { background: #3D5A6C; display: none; flex-direction: column; }
+    #error h2 { font-size: 20px; margin: 0 0 12px; }
+    #error pre {
+      background: rgba(0,0,0,0.3); padding: 16px; border-radius: 8px;
+      max-width: 700px; text-align: left; overflow: auto;
+      font-family: ui-monospace, monospace; font-size: 12px;
+    }
+
+    .app {
+      background: linear-gradient(180deg, #3D5A6C 0%, #4A6B7E 100%);
+      min-height: 100vh; display: flex; flex-direction: column;
+    }
+    .board-header {
+      padding: 12px 20px; display: flex; align-items: center; gap: 12px;
+      background: rgba(0,0,0,0.15); flex-wrap: wrap;
+    }
+    .searchbar {
+      display: flex; align-items: center; gap: 8px;
+      background: rgba(255,255,255,0.15);
+      border-radius: 8px; padding: 0 10px;
+      width: 240px; max-width: 34vw; transition: background 0.15s;
+    }
+    .searchbar:focus-within { background: rgba(255,255,255,0.9); }
+    .search-icon { color: rgba(255,255,255,0.7); display: flex; }
+    .searchbar:focus-within .search-icon { color: #14110F99; }
+    .searchbar input {
+      flex: 1; border: none; background: transparent; outline: none;
+      padding: 9px 0; font-size: 14px; color: white;
+    }
+    .searchbar input::placeholder { color: rgba(255,255,255,0.7); }
+    .searchbar:focus-within input { color: #14110F; }
+    .searchbar:focus-within input::placeholder { color: #14110F66; }
+    .search-clear { color: rgba(255,255,255,0.7); display: flex; padding: 2px; border-radius: 4px; }
+    .searchbar:focus-within .search-clear { color: #14110F99; }
+    .search-clear:hover { color: #14110F; background: rgba(0,0,0,0.08); }
+
+    .header-actions { display: flex; align-items: center; gap: 6px; }
+    .header-btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      color: rgba(255,255,255,0.85); font-size: 13px; font-weight: 500;
+      padding: 7px 12px; border-radius: 8px; background: rgba(255,255,255,0.12);
+    }
+    .header-btn:hover { background: rgba(255,255,255,0.24); color: white; }
+    .save-status { font-size: 12px; color: rgba(255,255,255,0.65); min-width: 54px; }
+    .user-chip { font-size: 12px; color: rgba(255,255,255,0.8); }
+
+    .lists-scroll {
+      flex: 1; overflow-x: auto; overflow-y: hidden;
+      padding: 8px 24px 24px; display: flex; align-items: flex-start; gap: 14px;
+    }
+    .lists-scroll::-webkit-scrollbar { height: 12px; }
+    .lists-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 6px; }
+    .lists-scroll::-webkit-scrollbar-track { background: rgba(0,0,0,0.1); }
+
+    .list-col {
+      background: #E8E2D5; border-radius: 10px; width: 288px; flex-shrink: 0;
+      max-height: calc(100vh - 110px); display: flex; flex-direction: column;
+      box-shadow: 0 1px 0 rgba(0,0,0,0.1);
+    }
+    .list-header { padding: 12px 12px 6px; display: flex; align-items: center; gap: 4px; }
+    .list-title { flex: 1; font-weight: 600; font-size: 14px; padding: 4px 8px; border-radius: 4px; cursor: pointer; }
+    .list-title:hover { background: rgba(0,0,0,0.06); }
+    .list-title-input {
+      flex: 1; font-weight: 600; font-size: 14px; padding: 4px 8px;
+      border: 2px solid #2D5F3F; border-radius: 4px; background: white; outline: none;
+    }
+    .list-body {
+      padding: 0 8px; overflow-y: auto; flex: 1;
+      display: flex; flex-direction: column; gap: 8px; min-height: 20px;
+    }
+    .list-body::-webkit-scrollbar { width: 8px; }
+    .list-body::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.15); border-radius: 4px; }
+
+    .card {
+      background: white; border-radius: 8px; padding: 10px 12px;
+      box-shadow: 0 1px 0 rgba(0,0,0,0.12); cursor: pointer; font-size: 14px;
+      border: 1px solid transparent; transition: border-color 0.1s;
+    }
+    .card:hover { border-color: #2D5F3F; }
+    .card.dragging { opacity: 0.4; }
+    .card-labels { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 6px; }
+    .label-pill {
+      font-size: 11px; font-weight: 600; color: white;
+      padding: 2px 8px; border-radius: 4px; line-height: 1.4; letter-spacing: 0.01em;
+    }
+    .card-meta {
+      display: flex; align-items: center; gap: 8px; margin-top: 8px;
+      color: rgba(20,17,15,0.45); font-size: 11px;
+    }
+    .card-date { display: inline-flex; align-items: center; gap: 4px; }
+    .card-hasdesc { margin-left: auto; font-size: 14px; line-height: 1; }
+
+    .drop-indicator { height: 4px; background: #2D5F3F; border-radius: 2px; margin: 0 2px; }
+    .list-footer { padding: 6px 8px 8px; }
+    .add-card-btn {
+      width: 100%; text-align: left; padding: 8px 10px; border-radius: 6px;
+      color: rgba(20,17,15,0.6); font-size: 14px; display: flex; align-items: center; gap: 6px;
+    }
+    .add-card-btn:hover { background: rgba(0,0,0,0.06); color: #14110F; }
+    .compose { background: white; border-radius: 8px; padding: 8px 10px; box-shadow: 0 1px 0 rgba(0,0,0,0.12); }
+    .compose textarea {
+      width: 100%; border: none; outline: none; resize: none;
+      font-size: 14px; min-height: 54px; padding: 2px;
+    }
+    .compose-actions { display: flex; align-items: center; gap: 6px; margin-top: 8px; }
+    .btn-primary { background: #2D5F3F; color: white; padding: 7px 14px; border-radius: 6px; font-size: 13px; font-weight: 600; }
+    .btn-primary:hover { background: #234a31; }
+    .add-list-col {
+      background: rgba(255,255,255,0.24); border-radius: 10px; width: 288px; flex-shrink: 0;
+      padding: 12px; color: white; font-size: 14px; font-weight: 500;
+      display: flex; align-items: center; gap: 6px; cursor: pointer;
+    }
+    .add-list-col:hover { background: rgba(255,255,255,0.32); }
+    .add-list-col.editing { background: #E8E2D5; cursor: default; }
+
+    .modal-backdrop {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.5);
+      display: flex; align-items: flex-start; justify-content: center;
+      padding: 48px 16px; z-index: 100; overflow-y: auto;
+    }
+    .modal {
+      background: #F5F0E4; border-radius: 12px; width: 100%; max-width: 640px;
+      padding: 28px; box-shadow: 0 20px 60px rgba(0,0,0,0.3); position: relative;
+    }
+    .modal-close { position: absolute; top: 16px; right: 16px; padding: 6px; color: rgba(20,17,15,0.6); }
+    .modal-close:hover { color: #14110F; }
+    .section-label { font-size: 12px; font-weight: 700; color: rgba(20,17,15,0.6); margin-bottom: 8px; }
+    .list-menu {
+      position: absolute; top: 100%; right: 0; margin-top: 4px; background: white;
+      border-radius: 8px; padding: 6px; box-shadow: 0 4px 16px rgba(0,0,0,0.2); z-index: 20; min-width: 180px;
+    }
+    .list-menu button {
+      width: 100%; text-align: left; padding: 8px 10px; font-size: 13px; border-radius: 4px;
+      display: flex; align-items: center; gap: 8px; color: #14110F;
+    }
+    .list-menu button:hover { background: rgba(0,0,0,0.06); }
+    .list-menu button.danger { color: #C4574A; }
+
+    /* auth + config screens */
+    .center-wrap {
+      min-height: 100vh; display: flex; align-items: center; justify-content: center;
+      padding: 24px; background: linear-gradient(180deg, #3D5A6C 0%, #4A6B7E 100%);
+    }
+    .auth-card {
+      background: #F5F0E4; border-radius: 14px; padding: 36px 32px; width: 100%; max-width: 420px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+    }
+    .auth-card h1 { font-family: 'Fraunces', serif; font-weight: 500; font-size: 30px; margin: 0 0 6px; letter-spacing: -0.02em; }
+    .auth-card p.sub { margin: 0 0 24px; color: rgba(20,17,15,0.6); font-size: 14px; }
+    .auth-input {
+      width: 100%; padding: 11px 12px; margin-bottom: 12px; font-size: 15px;
+      border: 1px solid rgba(20,17,15,0.2); border-radius: 8px; background: white; outline: none;
+    }
+    .auth-input:focus { border-color: #2D5F3F; }
+    .auth-btn {
+      width: 100%; padding: 12px; background: #2D5F3F; color: white; font-weight: 600;
+      font-size: 15px; border-radius: 8px; margin-top: 4px;
+    }
+    .auth-btn:hover { background: #234a31; }
+    .auth-btn:disabled { opacity: 0.6; cursor: default; }
+    .auth-toggle { margin-top: 18px; font-size: 14px; color: rgba(20,17,15,0.7); text-align: center; }
+    .auth-toggle button { color: #2D5F3F; font-weight: 600; text-decoration: underline; }
+    .auth-error { background: #C4574A18; color: #9c3f34; padding: 10px 12px; border-radius: 8px; font-size: 13px; margin-bottom: 14px; }
+    .auth-note { background: #4A8A6B18; color: #2D5F3F; padding: 10px 12px; border-radius: 8px; font-size: 13px; margin-bottom: 14px; }
+    .config-card { max-width: 560px; }
+    .config-card code {
+      background: rgba(20,17,15,0.08); padding: 2px 6px; border-radius: 4px;
+      font-family: ui-monospace, monospace; font-size: 13px;
+    }
+    .config-card ol { padding-left: 20px; line-height: 1.7; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <div id="root"><div id="loading">Loading…</div></div>
+  <div id="error">
+    <h2>Something went wrong loading the app.</h2>
+    <p style="opacity:0.8;max-width:600px;margin:0 0 16px;">Check your internet, or try a different browser.</p>
+    <pre id="error-detail"></pre>
+  </div>
+
+  <script>
+    window.addEventListener("error", function(e) {
+      var err = document.getElementById("error");
+      var loading = document.getElementById("loading");
+      if (loading) loading.style.display = "none";
+      err.style.display = "flex";
+      document.getElementById("error-detail").textContent =
+        (e.message || "Unknown error") + "\n\nSource: " + (e.filename || "?") + ":" + (e.lineno || "?");
+    });
+    setTimeout(function() {
+      if (typeof React === "undefined") {
+        var err = document.getElementById("error");
+        var loading = document.getElementById("loading");
+        if (loading) loading.style.display = "none";
+        err.style.display = "flex";
+        document.getElementById("error-detail").textContent =
+          "Libraries failed to load from the CDN.\n\nMost common cause: no internet connection or a firewall blocking unpkg.com / jsdelivr.net.";
+      }
+    }, 8000);
+  </script>
+
+  <script crossorigin src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.24.7/babel.min.js"></script>
+
+  <script type="text/babel">
+    const { useState, useEffect, useRef, Fragment } = React;
+
+    // ================================================================
+    //  CONFIG  —  paste your two Supabase values between the quotes.
+    //  Find them in Supabase: Project Settings → API.
+    // ================================================================
+    const SUPABASE_URL      = "https://nkbvbmhhnlvydnqqyiiz.supabase.co";
+    const SUPABASE_ANON_KEY = "sb_publishable_vIj0_SbNakmV1Ba5mYchUA_EeznO7ZI";
+    // ================================================================
+
+    const CONFIGURED =
+      !SUPABASE_URL.includes("YOUR") && !SUPABASE_ANON_KEY.includes("YOUR");
+
+    const sb = CONFIGURED ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
+
+    const uid = () => Math.random().toString(36).slice(2, 10);
+    const fmtDate = (ts) => {
+      if (!ts) return "";
+      try {
+        return new Date(ts).toLocaleString(undefined, {
+          day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit"
+        });
+      } catch (e) { return ""; }
+    };
+
+    const Icon = ({ children, size = 16 }) => (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
+        stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+        style={{ display: "inline-block", verticalAlign: "middle" }}>{children}</svg>
+    );
+    const IconPlus  = (p) => <Icon {...p}><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></Icon>;
+    const IconX     = (p) => <Icon {...p}><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></Icon>;
+    const IconTrash = (p) => <Icon {...p}><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/></Icon>;
+    const IconDots  = (p) => <Icon {...p}><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></Icon>;
+    const IconTag   = (p) => <Icon {...p}><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></Icon>;
+    const IconCheck = (p) => <Icon {...p}><polyline points="20 6 9 17 4 12"/></Icon>;
+
+    const DEFAULT_LABELS = [
+      { id: "l1", name: "Idea", color: "#8B7BB8" },
+      { id: "l2", name: "Priority", color: "#D96F5C" },
+      { id: "l3", name: "On Track", color: "#4A8A6B" },
+      { id: "l4", name: "Blocked", color: "#C4574A" },
+      { id: "l5", name: "Research", color: "#D4A94A" },
+      { id: "l6", name: "Launched", color: "#3D6FA8" },
+    ];
+
+    const seedBoard = () => ({
+      title: "My Product Board",
+      labels: DEFAULT_LABELS,
+      lists: [
+        { id: uid(), title: "Ideas", cards: [
+          { id: uid(), title: "AI-powered recipe generator",
+            description: "Something that takes what's in the fridge and suggests meals.",
+            labels: ["l1", "l5"], createdAt: Date.now() - 86400000 * 2 } ]},
+        { id: uid(), title: "Planning", cards: [
+          { id: uid(), title: "Portfolio website redesign", description: "", labels: ["l2"], createdAt: Date.now() - 86400000 } ]},
+        { id: uid(), title: "Building", cards: [
+          { id: uid(), title: "Product tracker app",
+            description: "The thing you're using right now.", labels: ["l3"], createdAt: Date.now() - 3600000 } ]},
+        { id: uid(), title: "Launched", cards: [] },
+      ],
+    });
+
+    // normalize an imported / loaded board so missing fields don't crash the UI
+    const cleanBoard = (parsed) => ({
+      title: parsed.title || "My Product Board",
+      labels: Array.isArray(parsed.labels) && parsed.labels.length ? parsed.labels : DEFAULT_LABELS,
+      lists: (Array.isArray(parsed.lists) ? parsed.lists : []).map(l => ({
+        id: l.id || uid(), title: l.title || "Untitled",
+        cards: (Array.isArray(l.cards) ? l.cards : []).map(c => ({
+          id: c.id || uid(), title: c.title || "Untitled card",
+          description: c.description || "", labels: Array.isArray(c.labels) ? c.labels : [],
+          createdAt: c.createdAt || null,
+        })),
+      })),
+    });
+
+    // ---------------- top-level app: config → auth → board ----------------
+    function App() {
+      const [session, setSession] = useState(undefined); // undefined = checking
+
+      useEffect(() => {
+        if (!CONFIGURED) return;
+        sb.auth.getSession().then(({ data }) => setSession(data.session || null));
+        const { data: sub } = sb.auth.onAuthStateChange((_event, s) => setSession(s || null));
+        return () => sub.subscription.unsubscribe();
+      }, []);
+
+      if (!CONFIGURED) return <ConfigScreen />;
+      if (session === undefined) return <div className="center-wrap"><div style={{color:"white"}}>Checking sign-in…</div></div>;
+      if (!session) return <AuthScreen />;
+      return <BoardApp user={session.user} />;
+    }
+
+    function ConfigScreen() {
+      return (
+        <div className="center-wrap">
+          <div className="auth-card config-card">
+            <h1>Almost there</h1>
+            <p className="sub">This board needs to be connected to your Supabase project before it can sign you in.</p>
+            <ol>
+              <li>Create a free project at <code>supabase.com</code>.</li>
+              <li>Open <strong>Project Settings → API</strong>.</li>
+              <li>Copy your <strong>Project URL</strong> and <strong>anon public key</strong>.</li>
+              <li>Open this HTML file in a text editor and paste them into the <code>CONFIG</code> block near the top of the script.</li>
+              <li>Save, then re-open the page.</li>
+            </ol>
+            <p className="sub" style={{marginTop:16}}>Full step-by-step instructions came with this file.</p>
+          </div>
+        </div>
+      );
+    }
+
+    function AuthScreen() {
+      const [mode, setMode] = useState("signin"); // signin | signup
+      const [email, setEmail] = useState("");
+      const [password, setPassword] = useState("");
+      const [busy, setBusy] = useState(false);
+      const [error, setError] = useState("");
+      const [note, setNote] = useState("");
+
+      const submit = async () => {
+        setError(""); setNote("");
+        if (!email.trim() || !password) { setError("Please enter your email and password."); return; }
+        setBusy(true);
+        try {
+          if (mode === "signin") {
+            const { error } = await sb.auth.signInWithPassword({ email: email.trim(), password });
+            if (error) setError(error.message);
+          } else {
+            const { data, error } = await sb.auth.signUp({ email: email.trim(), password });
+            if (error) { setError(error.message); }
+            else if (!data.session) {
+              setNote("Account created. Check your email to confirm your address, then sign in.");
+              setMode("signin");
+            }
+            // if data.session exists, onAuthStateChange logs us straight in
+          }
+        } catch (e) { setError(e.message); }
+        setBusy(false);
+      };
+
+      return (
+        <div className="center-wrap">
+          <div className="auth-card">
+            <h1>{mode === "signin" ? "Welcome back" : "Create your account"}</h1>
+            <p className="sub">Your product board, private to you and synced across your devices.</p>
+            {error && <div className="auth-error">{error}</div>}
+            {note && <div className="auth-note">{note}</div>}
+            <input className="auth-input" type="email" placeholder="Email" value={email}
+              onChange={e => setEmail(e.target.value)} onKeyDown={e => e.key === "Enter" && submit()} autoFocus />
+            <input className="auth-input" type="password" placeholder="Password (min 6 characters)" value={password}
+              onChange={e => setPassword(e.target.value)} onKeyDown={e => e.key === "Enter" && submit()} />
+            <button className="auth-btn" onClick={submit} disabled={busy}>
+              {busy ? "Please wait…" : (mode === "signin" ? "Sign in" : "Sign up")}
+            </button>
+            <div className="auth-toggle">
+              {mode === "signin" ? "New here? " : "Already have an account? "}
+              <button onClick={() => { setMode(mode === "signin" ? "signup" : "signin"); setError(""); setNote(""); }}>
+                {mode === "signin" ? "Create an account" : "Sign in"}
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ---------------- the board (loads from + saves to Supabase) ----------------
+    function BoardApp({ user }) {
+      const [board, setBoard] = useState(null);
+      const [loadError, setLoadError] = useState("");
+      const [openCard, setOpenCard] = useState(null);
+      const [drag, setDrag] = useState(null);
+      const [dragOver, setDragOver] = useState(null);
+      const [query, setQuery] = useState("");
+      const [saveStatus, setSaveStatus] = useState("saved"); // saving | saved | error
+      const fileInputRef = useRef(null);
+      const skipNextSave = useRef(true);
+      const saveTimer = useRef(null);
+
+      // load this user's board (or create a seed on first login)
+      useEffect(() => {
+        let cancelled = false;
+        (async () => {
+          try {
+            const { data, error } = await sb.from("boards").select("data").eq("user_id", user.id).maybeSingle();
+            if (cancelled) return;
+            if (error) { setLoadError(error.message); return; }
+            if (data && data.data) {
+              skipNextSave.current = true;
+              setBoard(cleanBoard(data.data));
+            } else {
+              const seed = seedBoard();
+              await sb.from("boards").upsert({ user_id: user.id, data: seed, updated_at: new Date().toISOString() });
+              if (cancelled) return;
+              skipNextSave.current = true;
+              setBoard(seed);
+            }
+          } catch (e) { if (!cancelled) setLoadError(e.message); }
+        })();
+        return () => { cancelled = true; };
+      }, [user.id]);
+
+      // debounced save on every change
+      useEffect(() => {
+        if (!board) return;
+        if (skipNextSave.current) { skipNextSave.current = false; return; }
+        setSaveStatus("saving");
+        clearTimeout(saveTimer.current);
+        saveTimer.current = setTimeout(async () => {
+          try {
+            const { error } = await sb.from("boards")
+              .upsert({ user_id: user.id, data: board, updated_at: new Date().toISOString() });
+            setSaveStatus(error ? "error" : "saved");
+            if (error) console.error(error);
+          } catch (e) { setSaveStatus("error"); console.error(e); }
+        }, 700);
+      }, [board]);
+
+      const signOut = () => sb.auth.signOut();
+
+      if (loadError) {
+        return <div className="center-wrap"><div className="auth-card">
+          <h1>Couldn't load your board</h1>
+          <p className="sub">{loadError}</p>
+          <button className="auth-btn" onClick={() => window.location.reload()}>Retry</button>
+          <div className="auth-toggle"><button onClick={signOut}>Sign out</button></div>
+        </div></div>;
+      }
+      if (!board) return <div className="center-wrap"><div style={{color:"white"}}>Loading your board…</div></div>;
+
+      // ---- data ops ----
+      const setBoardTitle = (title) => setBoard(b => ({ ...b, title }));
+      const addList = (title) => { if (!title.trim()) return;
+        setBoard(b => ({ ...b, lists: [...b.lists, { id: uid(), title: title.trim(), cards: [] }] })); };
+      const renameList = (listId, title) =>
+        setBoard(b => ({ ...b, lists: b.lists.map(l => l.id === listId ? { ...l, title } : l) }));
+      const deleteList = (listId) => { if (!confirm("Delete this list and all its cards?")) return;
+        setBoard(b => ({ ...b, lists: b.lists.filter(l => l.id !== listId) })); };
+      const addCard = (listId, title) => { if (!title.trim()) return;
+        const card = { id: uid(), title: title.trim(), description: "", labels: [], createdAt: Date.now() };
+        setBoard(b => ({ ...b, lists: b.lists.map(l => l.id === listId ? { ...l, cards: [...l.cards, card] } : l) })); };
+      const updateCard = (listId, cardId, patch) =>
+        setBoard(b => ({ ...b, lists: b.lists.map(l => l.id === listId
+          ? { ...l, cards: l.cards.map(c => c.id === cardId ? { ...c, ...patch } : c) } : l) }));
+      const deleteCard = (listId, cardId) => {
+        setBoard(b => ({ ...b, lists: b.lists.map(l => l.id === listId
+          ? { ...l, cards: l.cards.filter(c => c.id !== cardId) } : l) }));
+        if (openCard && openCard.cardId === cardId) setOpenCard(null);
+      };
+
+      const handleDragStart = (cardId, sourceListId) => setDrag({ cardId, sourceListId });
+      const handleDragEnd = () => { setDrag(null); setDragOver(null); };
+      const handleDragOverSlot = (e, listId, index) => { e.preventDefault(); if (drag) setDragOver({ listId, index }); };
+      const handleDropOnSlot = (e, targetListId, targetIndex) => {
+        e.preventDefault(); if (!drag) return;
+        setBoard(b => {
+          const { cardId, sourceListId } = drag;
+          const sourceList = b.lists.find(l => l.id === sourceListId);
+          if (!sourceList) return b;
+          const card = sourceList.cards.find(c => c.id === cardId);
+          if (!card) return b;
+          const newLists = b.lists.map(l => l.id === sourceListId
+            ? { ...l, cards: l.cards.filter(c => c.id !== cardId) } : l);
+          let insertIndex = targetIndex;
+          if (sourceListId === targetListId) {
+            const oldIndex = sourceList.cards.findIndex(c => c.id === cardId);
+            if (oldIndex < targetIndex) insertIndex = targetIndex - 1;
+          }
+          return { ...b, lists: newLists.map(l => {
+            if (l.id === targetListId) { const cards = [...l.cards]; cards.splice(insertIndex, 0, card); return { ...l, cards }; }
+            return l;
+          })};
+        });
+        setDrag(null); setDragOver(null);
+      };
+
+      const exportBoard = () => {
+        try {
+          const blob = new Blob([JSON.stringify(board, null, 2)], { type: "application/json" });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url; a.download = "product-board-" + new Date().toISOString().slice(0,10) + ".json";
+          document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+        } catch (e) { alert("Export failed: " + e.message); }
+      };
+      const importBoard = (file) => {
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          try {
+            const parsed = JSON.parse(ev.target.result);
+            if (!parsed || !Array.isArray(parsed.lists)) { alert("That doesn't look like a valid board backup."); return; }
+            if (!confirm("Importing will REPLACE your current board. Continue?")) return;
+            setBoard(cleanBoard(parsed)); setQuery("");
+          } catch (e) { alert("Couldn't read that file: " + e.message); }
+        };
+        reader.readAsText(file);
+      };
+
+      const openedList = openCard ? board.lists.find(l => l.id === openCard.listId) : null;
+      const openedCard = openedList ? openedList.cards.find(c => c.id === openCard.cardId) : null;
+
+      const q = query.trim().toLowerCase();
+      const searching = q.length > 0;
+      const matchCard = (card, listMatches) => {
+        if (!searching) return true; if (listMatches) return true;
+        return (card.title||"").toLowerCase().includes(q) || (card.description||"").toLowerCase().includes(q);
+      };
+      const visibleLists = board.lists.map(list => {
+        const listMatches = searching && list.title.toLowerCase().includes(q);
+        return { list, cards: list.cards.filter(c => matchCard(c, listMatches)), listMatches };
+      }).filter(e => !searching || e.cards.length > 0 || e.listMatches);
+      const matchCount = searching ? visibleLists.reduce((n,e)=>n+e.cards.length,0) : 0;
+
+      const saveLabel = saveStatus === "saving" ? "Saving…" : saveStatus === "error" ? "Save failed" : "Saved ✓";
+
+      return (
+        <div className="app">
+          <header className="board-header">
+            <EditableTitle value={board.title} onChange={setBoardTitle}
+              style={{ color: "white", fontSize: 20, fontWeight: 600, fontFamily: "'Fraunces', serif", letterSpacing: "-0.01em" }} />
+
+            <div className="searchbar" style={{ marginLeft: "auto" }}>
+              <span className="search-icon">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              </span>
+              <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search cards and lists…"
+                onKeyDown={e => { if (e.key === "Escape") setQuery(""); }} />
+              {searching && <button className="search-clear" onClick={() => setQuery("")}><IconX size={14}/></button>}
+            </div>
+
+            <span className="save-status">{saveLabel}</span>
+
+            <div className="header-actions">
+              <button className="header-btn" onClick={exportBoard} title="Download a backup">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                Export
+              </button>
+              <button className="header-btn" onClick={() => fileInputRef.current && fileInputRef.current.click()} title="Restore from a backup">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                Import
+              </button>
+              <input ref={fileInputRef} type="file" accept="application/json,.json" style={{ display: "none" }}
+                onChange={e => { const f = e.target.files && e.target.files[0]; importBoard(f); e.target.value = ""; }} />
+              <button className="header-btn" onClick={signOut} title={user.email}>Sign out</button>
+            </div>
+          </header>
+
+          <div className="lists-scroll">
+            {visibleLists.map(({ list, cards }) => (
+              <ListColumn key={list.id} list={list} visibleCards={cards} searching={searching} labels={board.labels}
+                drag={drag} dragOver={dragOver}
+                onRename={(t) => renameList(list.id, t)} onDelete={() => deleteList(list.id)}
+                onAddCard={(t) => addCard(list.id, t)} onOpenCard={(cardId) => setOpenCard({ listId: list.id, cardId })}
+                onDragStart={handleDragStart} onDragEnd={handleDragEnd}
+                onDragOverSlot={handleDragOverSlot} onDropOnSlot={handleDropOnSlot} />
+            ))}
+            {searching && visibleLists.length === 0 && (
+              <div style={{ color: "rgba(255,255,255,0.85)", padding: "24px 8px", fontSize: 15 }}>No cards or lists match “{query}”.</div>
+            )}
+            {!searching && <AddListColumn onAdd={addList} />}
+          </div>
+
+          {openedCard && (
+            <CardModal card={openedCard} listTitle={openedList.title} allLabels={board.labels}
+              onClose={() => setOpenCard(null)}
+              onUpdate={(patch) => updateCard(openCard.listId, openCard.cardId, patch)}
+              onDelete={() => deleteCard(openCard.listId, openCard.cardId)} />
+          )}
+        </div>
+      );
+    }
+
+    function EditableTitle({ value, onChange, style }) {
+      const [editing, setEditing] = useState(false);
+      const [draft, setDraft] = useState(value);
+      const ref = useRef(null);
+      useEffect(() => { if (editing && ref.current) { ref.current.focus(); ref.current.select(); } }, [editing]);
+      const commit = () => { if (draft.trim()) onChange(draft.trim()); else setDraft(value); setEditing(false); };
+      if (editing) {
+        return <input ref={ref} value={draft} onChange={e => setDraft(e.target.value)} onBlur={commit}
+          onKeyDown={e => { if (e.key === "Enter") commit(); if (e.key === "Escape") { setDraft(value); setEditing(false); } }}
+          style={{ ...style, background: "rgba(255,255,255,0.15)", border: "none", padding: "4px 8px", borderRadius: 4, outline: "none" }} />;
+      }
+      return <div onClick={() => { setDraft(value); setEditing(true); }}
+        style={{ ...style, padding: "4px 8px", borderRadius: 4, cursor: "pointer" }}>{value}</div>;
+    }
+
+    function ListColumn(props) {
+      const { list, visibleCards, searching, labels, drag, dragOver, onRename, onDelete, onAddCard, onOpenCard, onDragStart, onDragEnd, onDragOverSlot, onDropOnSlot } = props;
+      const cards = visibleCards || list.cards;
+      const [editingTitle, setEditingTitle] = useState(false);
+      const [titleDraft, setTitleDraft] = useState(list.title);
+      const [adding, setAdding] = useState(false);
+      const [newTitle, setNewTitle] = useState("");
+      const [menuOpen, setMenuOpen] = useState(false);
+      const composeRef = useRef(null);
+
+      useEffect(() => { if (adding && composeRef.current) composeRef.current.focus(); }, [adding]);
+      useEffect(() => { if (!menuOpen) return;
+        const close = () => setMenuOpen(false); window.addEventListener("click", close);
+        return () => window.removeEventListener("click", close); }, [menuOpen]);
+
+      const commitTitle = () => { if (titleDraft.trim()) onRename(titleDraft.trim()); else setTitleDraft(list.title); setEditingTitle(false); };
+      const submitCard = () => { if (newTitle.trim()) { onAddCard(newTitle); setNewTitle(""); } else setAdding(false); };
+      const isDropTarget = dragOver && dragOver.listId === list.id;
+
+      return (
+        <div className="list-col">
+          <div className="list-header">
+            {editingTitle ? (
+              <input className="list-title-input" autoFocus value={titleDraft}
+                onChange={e => setTitleDraft(e.target.value)} onBlur={commitTitle}
+                onKeyDown={e => { if (e.key === "Enter") commitTitle(); if (e.key === "Escape") { setTitleDraft(list.title); setEditingTitle(false); } }}
+                onFocus={e => e.target.select()} />
+            ) : (
+              <div className="list-title" onClick={() => { setTitleDraft(list.title); setEditingTitle(true); }}>{list.title}</div>
+            )}
+            <div style={{ position: "relative" }}>
+              <button onClick={e => { e.stopPropagation(); setMenuOpen(v => !v); }} style={{ padding: 6, borderRadius: 4, color: "rgba(20,17,15,0.6)" }}><IconDots /></button>
+              {menuOpen && (
+                <div className="list-menu" onClick={e => e.stopPropagation()}>
+                  <button onClick={() => { setAdding(true); setMenuOpen(false); }}><IconPlus size={14}/> Add card</button>
+                  <button onClick={() => { setTitleDraft(list.title); setEditingTitle(true); setMenuOpen(false); }}>Rename list</button>
+                  <button className="danger" onClick={() => { onDelete(); setMenuOpen(false); }}><IconTrash size={14}/> Delete list</button>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="list-body"
+            onDragOver={e => { if (searching) return; e.preventDefault(); if (drag && !dragOver) onDragOverSlot(e, list.id, cards.length); }}
+            onDrop={e => { if (searching) return; e.preventDefault();
+              if (drag) { const idx = (dragOver && dragOver.listId === list.id) ? dragOver.index : cards.length; onDropOnSlot(e, list.id, idx); } }}>
+            {cards.map((card, i) => (
+              <Fragment key={card.id}>
+                {!searching && isDropTarget && dragOver.index === i && <div className="drop-indicator" />}
+                <div onDragOver={e => { if (!searching) onDragOverSlot(e, list.id, i); }}>
+                  <CardTile card={card} labels={labels} draggable={!searching} dragging={drag && drag.cardId === card.id}
+                    onOpen={() => onOpenCard(card.id)} onDragStart={() => onDragStart(card.id, list.id)} onDragEnd={onDragEnd} />
+                </div>
+              </Fragment>
+            ))}
+            {!searching && isDropTarget && dragOver.index === cards.length && <div className="drop-indicator" />}
+
+            {adding && (
+              <div className="compose">
+                <textarea ref={composeRef} value={newTitle} onChange={e => setNewTitle(e.target.value)} placeholder="Enter a title for this card…"
+                  onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); submitCard(); } if (e.key === "Escape") { setAdding(false); setNewTitle(""); } }} />
+                <div className="compose-actions">
+                  <button className="btn-primary" onClick={submitCard}>Add card</button>
+                  <button onClick={() => { setAdding(false); setNewTitle(""); }} style={{ padding: 6, color: "rgba(20,17,15,0.6)" }}><IconX size={18}/></button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {!adding && (
+            <div className="list-footer">
+              <button className="add-card-btn" onClick={() => setAdding(true)}><IconPlus size={16}/> Add a card</button>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    function CardTile({ card, labels, dragging, draggable = true, onOpen, onDragStart, onDragEnd }) {
+      const cardLabels = labels.filter(l => card.labels && card.labels.includes(l.id));
+      return (
+        <div className={"card " + (dragging ? "dragging" : "")} draggable={draggable}
+          onDragStart={e => { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", card.id); onDragStart(); }}
+          onDragEnd={onDragEnd} onClick={onOpen}>
+          {cardLabels.length > 0 && (
+            <div className="card-labels">{cardLabels.map(l => <span key={l.id} className="label-pill" style={{ background: l.color }}>{l.name}</span>)}</div>
+          )}
+          <div style={{ lineHeight: 1.35 }}>{card.title}</div>
+          <div className="card-meta">
+            {card.createdAt && (
+              <span className="card-date">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/></svg>
+                {fmtDate(card.createdAt)}
+              </span>
+            )}
+            {card.description && <span className="card-hasdesc" title="Has description">≡</span>}
+          </div>
+        </div>
+      );
+    }
+
+    function AddListColumn({ onAdd }) {
+      const [editing, setEditing] = useState(false);
+      const [title, setTitle] = useState("");
+      const ref = useRef(null);
+      useEffect(() => { if (editing && ref.current) ref.current.focus(); }, [editing]);
+      const submit = () => { if (title.trim()) { onAdd(title); setTitle(""); } setEditing(false); };
+      if (!editing) return <button className="add-list-col" onClick={() => setEditing(true)}><IconPlus size={16}/> Add another list</button>;
+      return (
+        <div className="add-list-col editing">
+          <input ref={ref} value={title} onChange={e => setTitle(e.target.value)} placeholder="Enter list title…"
+            style={{ flex: 1, border: "2px solid #2D5F3F", borderRadius: 4, padding: "6px 8px", fontSize: 14, fontWeight: 500, background: "white", outline: "none", color: "#14110F" }}
+            onKeyDown={e => { if (e.key === "Enter") submit(); if (e.key === "Escape") { setEditing(false); setTitle(""); } }} />
+          <button onClick={() => { setEditing(false); setTitle(""); }} style={{ color: "#14110F", padding: 4 }}><IconX size={18}/></button>
+        </div>
+      );
+    }
+
+    function CardModal({ card, listTitle, allLabels, onClose, onUpdate, onDelete }) {
+      const [title, setTitle] = useState(card.title);
+      const [description, setDescription] = useState(card.description || "");
+      const [showLabels, setShowLabels] = useState(false);
+      useEffect(() => { setTitle(card.title); setDescription(card.description || ""); }, [card.id]);
+      const toggleLabel = (labelId) => { const current = card.labels || [];
+        onUpdate({ labels: current.includes(labelId) ? current.filter(id => id !== labelId) : [...current, labelId] }); };
+      const commitTitle = () => { if (title.trim() && title.trim() !== card.title) onUpdate({ title: title.trim() }); else if (!title.trim()) setTitle(card.title); };
+      const commitDesc = () => { if (description !== (card.description || "")) onUpdate({ description }); };
+      const cardLabels = allLabels.filter(l => card.labels && card.labels.includes(l.id));
+
+      return (
+        <div className="modal-backdrop" onClick={onClose}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <button className="modal-close" onClick={onClose}><IconX size={20}/></button>
+            <input value={title} onChange={e => setTitle(e.target.value)} onBlur={commitTitle}
+              onKeyDown={e => { if (e.key === "Enter") { commitTitle(); e.target.blur(); } }} className="serif"
+              style={{ width: "100%", fontSize: 24, fontWeight: 500, border: "none", background: "transparent", outline: "none", padding: 0, marginBottom: 4, letterSpacing: "-0.01em" }} />
+            <div style={{ fontSize: 13, color: "rgba(20,17,15,0.6)", marginBottom: 24 }}>
+              in list <strong style={{ color: "#14110F" }}>{listTitle}</strong>
+              {card.createdAt && <span> · added {fmtDate(card.createdAt)}</span>}
+            </div>
+            {cardLabels.length > 0 && (
+              <div style={{ marginBottom: 24 }}>
+                <div className="section-label">Labels</div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                  {cardLabels.map(l => <span key={l.id} className="label-pill" style={{ background: l.color, fontSize: 12, padding: "4px 10px" }}>{l.name}</span>)}
+                </div>
+              </div>
+            )}
+            <div style={{ marginBottom: 28 }}>
+              <div className="section-label">Description</div>
+              <textarea value={description} onChange={e => setDescription(e.target.value)} onBlur={commitDesc} placeholder="Add a more detailed description…"
+                style={{ width: "100%", minHeight: 100, border: "1px solid rgba(20,17,15,0.13)", borderRadius: 6, padding: 12, fontSize: 14, lineHeight: 1.5, background: "white", outline: "none", resize: "vertical" }} />
+            </div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", position: "relative" }}>
+              <button onClick={() => setShowLabels(v => !v)}
+                style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 14px", background: "rgba(20,17,15,0.05)", borderRadius: 6, fontSize: 13, fontWeight: 500, color: "#14110F" }}>
+                <IconTag size={14}/> Labels
+              </button>
+              <button onClick={() => { if (confirm("Delete this card?")) onDelete(); }}
+                style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 14px", background: "transparent", borderRadius: 6, fontSize: 13, fontWeight: 500, color: "#C4574A", marginLeft: "auto" }}>
+                <IconTrash size={14}/> Delete card
+              </button>
+              {showLabels && (
+                <div style={{ position: "absolute", top: "100%", left: 0, marginTop: 8, background: "white", borderRadius: 8, padding: 12, boxShadow: "0 8px 24px rgba(0,0,0,0.15)", width: 260, zIndex: 10 }}>
+                  <div className="section-label" style={{ marginBottom: 10 }}>Toggle labels</div>
+                  {allLabels.map(l => {
+                    const on = card.labels && card.labels.includes(l.id);
+                    return (
+                      <button key={l.id} onClick={() => toggleLabel(l.id)} style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "6px 4px", borderRadius: 4 }}>
+                        <span style={{ flex: 1, background: l.color, color: "white", padding: "6px 10px", borderRadius: 4, fontSize: 12, fontWeight: 600, textAlign: "left" }}>{l.name}</span>
+                        {on && <IconCheck size={16} />}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    (function mount() {
+      if (typeof React === "undefined" || typeof ReactDOM === "undefined") { setTimeout(mount, 100); return; }
+      ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+    })();
+  </script>
+</body>
+</html>
