@@ -199,6 +199,36 @@
       font-family: ui-monospace, monospace; font-size: 13px;
     }
     .config-card ol { padding-left: 20px; line-height: 1.7; font-size: 14px; }
+
+    /* move-to-list buttons (works on touch, unlike drag) */
+    .move-btn {
+      padding: 7px 12px; border-radius: 6px; font-size: 13px; font-weight: 500;
+      background: rgba(20,17,15,0.06); color: #14110F;
+    }
+    .move-btn:hover:not(:disabled) { background: #2D5F3F; color: white; }
+    .move-btn:disabled { opacity: 0.45; cursor: default; }
+
+    /* ---------- mobile ---------- */
+    @media (max-width: 640px) {
+      .board-header { padding: 10px 12px; gap: 8px; }
+      /* search drops to its own full-width row under the title */
+      .searchbar { order: 3; width: 100%; max-width: none; margin-left: 0 !important; }
+      .save-status { order: 2; margin-left: auto; }
+      .header-actions { order: 4; width: 100%; }
+      .header-actions .header-btn { flex: 1; justify-content: center; padding: 9px 8px; }
+
+      .lists-scroll { padding: 8px 12px 20px; gap: 12px; scroll-snap-type: x mandatory; }
+      /* each column nearly fills the screen, with a peek of the next (Trello-style) */
+      .list-col { width: 86vw; scroll-snap-align: start; max-height: calc(100vh - 150px); }
+      .add-list-col { width: 86vw; scroll-snap-align: start; }
+
+      .modal { padding: 20px; }
+      .modal-backdrop { padding: 16px; }
+
+      /* 16px inputs stop iOS from auto-zooming when you tap a field */
+      .searchbar input, .compose textarea, .auth-input,
+      .list-title-input, .modal textarea, .modal input { font-size: 16px; }
+    }
   </style>
 </head>
 <body>
@@ -486,6 +516,19 @@
           ? { ...l, cards: l.cards.filter(c => c.id !== cardId) } : l) }));
         if (openCard && openCard.cardId === cardId) setOpenCard(null);
       };
+      const moveCard = (cardId, fromListId, toListId) => {
+        if (fromListId === toListId) return;
+        setBoard(b => {
+          const from = b.lists.find(l => l.id === fromListId);
+          const card = from && from.cards.find(c => c.id === cardId);
+          if (!card) return b;
+          return { ...b, lists: b.lists.map(l => {
+            if (l.id === fromListId) return { ...l, cards: l.cards.filter(c => c.id !== cardId) };
+            if (l.id === toListId) return { ...l, cards: [...l.cards, card] };
+            return l;
+          })};
+        });
+      };
 
       const handleDragStart = (cardId, sourceListId) => setDrag({ cardId, sourceListId });
       const handleDragEnd = () => { setDrag(null); setDragOver(null); };
@@ -605,6 +648,8 @@
 
           {openedCard && (
             <CardModal card={openedCard} listTitle={openedList.title} allLabels={board.labels}
+              lists={board.lists} currentListId={openCard.listId}
+              onMove={(toListId) => { moveCard(openCard.cardId, openCard.listId, toListId); setOpenCard({ listId: toListId, cardId: openCard.cardId }); }}
               onClose={() => setOpenCard(null)}
               onUpdate={(patch) => updateCard(openCard.listId, openCard.cardId, patch)}
               onDelete={() => deleteCard(openCard.listId, openCard.cardId)} />
@@ -747,7 +792,7 @@
       );
     }
 
-    function CardModal({ card, listTitle, allLabels, onClose, onUpdate, onDelete }) {
+    function CardModal({ card, listTitle, allLabels, lists, currentListId, onMove, onClose, onUpdate, onDelete }) {
       const [title, setTitle] = useState(card.title);
       const [description, setDescription] = useState(card.description || "");
       const [showLabels, setShowLabels] = useState(false);
@@ -777,11 +822,24 @@
                 </div>
               </div>
             )}
-            <div style={{ marginBottom: 28 }}>
+            <div style={{ marginBottom: 24 }}>
               <div className="section-label">Description</div>
               <textarea value={description} onChange={e => setDescription(e.target.value)} onBlur={commitDesc} placeholder="Add a more detailed description…"
                 style={{ width: "100%", minHeight: 100, border: "1px solid rgba(20,17,15,0.13)", borderRadius: 6, padding: 12, fontSize: 14, lineHeight: 1.5, background: "white", outline: "none", resize: "vertical" }} />
             </div>
+            {lists && lists.length > 1 && (
+              <div style={{ marginBottom: 24 }}>
+                <div className="section-label">Move to list</div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                  {lists.map(l => (
+                    <button key={l.id} className="move-btn" disabled={l.id === currentListId}
+                      onClick={() => onMove(l.id)}>
+                      {l.title}{l.id === currentListId ? " · here" : ""}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", position: "relative" }}>
               <button onClick={() => setShowLabels(v => !v)}
                 style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 14px", background: "rgba(20,17,15,0.05)", borderRadius: 6, fontSize: 13, fontWeight: 500, color: "#14110F" }}>
